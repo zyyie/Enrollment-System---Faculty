@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My Classes - Faculty Portal</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="css/faculty.css">
+  <link rel="stylesheet" href="css/faculty-extra.css">
+</head>
+<body class="admin-layout">
+  <div id="facultySidebarWrap"></div>
+  <div class="admin-main">
+    <div id="facultyHeader"></div>
+    <main class="admin-content">
+      <div class="admin-card">
+        <div class="admin-card-head"><i class="fas fa-chalkboard-user"></i> Assigned Classes — <span id="classesLevelLabel">Grade 11</span></div>
+        <div class="admin-card-body padded" id="classesBody">
+          <div class="admin-empty">Loading classes...</div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="../js/config.js"></script>
+  <script src="js/faculty.js"></script>
+  <script>
+    async function loadClasses() {
+      const container = document.getElementById('classesBody');
+      const gradeLevel = FacultyApp.getClassesGradeLevel();
+      const label = document.getElementById('classesLevelLabel');
+      if (label) label.textContent = gradeLevel;
+      const q = FacultyApp.facultyQueryParam();
+
+      try {
+        const res = await FacultyApp.fetchJson('/api/faculty/schedule?' + q);
+        const rows = FacultyApp.filterScheduleByGrade(res.data || [], gradeLevel);
+        const seen = new Set();
+        const uniqueRows = rows.filter((row) => {
+          const key = `${row.subjectCode || row.subjectName}::${row.section || ''}::${row.scheduleLabel || row.dayOfWeek || ''}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+
+        if (!uniqueRows.length) {
+          container.innerHTML = `<div class="admin-empty">No ${FacultyApp.escHtml(gradeLevel)} classes assigned for the current term.</div>`;
+          return;
+        }
+
+        container.innerHTML = `
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;">
+            ${uniqueRows.map(r => `
+              <div class="admin-card" style="margin:0;">
+                <div class="admin-card-head">${FacultyApp.escHtml(r.subjectCode)}</div>
+                <div class="admin-card-body padded">
+                  <p style="margin:0 0 8px;font-weight:600;">${FacultyApp.escHtml(r.subjectName)}</p>
+                  <p style="margin:0 0 4px;font-size:13px;color:#64748b;">Section: ${FacultyApp.escHtml(r.section || '—')}</p>
+                  <p style="margin:0 0 4px;font-size:13px;color:#64748b;">Schedule: ${FacultyApp.escHtml(r.scheduleLabel || r.dayOfWeek || '—')}</p>
+                  <p style="margin:0 0 4px;font-size:13px;color:#64748b;">Room: ${FacultyApp.escHtml(r.room || 'TBA')}</p>
+                  <p style="margin:0;font-size:13px;color:#334155;">Enrolled: <strong>${FacultyApp.escHtml(String(r.enrolledCount ?? 0))}</strong> / ${FacultyApp.escHtml(String(r.maxSlots ?? 0))}</p>
+                </div>
+              </div>
+            `).join('')}
+          </div>`;
+      } catch (err) {
+        container.innerHTML = `<div class="admin-empty">${FacultyApp.escHtml(err.message)}</div>`;
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      if (!FacultyApp.requireAuth()) return;
+      FacultyApp.initLayout('classes', 'My Classes');
+      loadClasses();
+    });
+  </script>
+</body>
+</html>

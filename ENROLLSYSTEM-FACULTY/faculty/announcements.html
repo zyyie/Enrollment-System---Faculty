@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Announcements - Faculty Portal</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="css/faculty.css">
+  <link rel="stylesheet" href="css/faculty-extra.css">
+</head>
+<body class="admin-layout">
+  <div id="facultySidebarWrap"></div>
+  <div class="admin-main">
+    <div id="facultyHeader"></div>
+    <main class="admin-content faculty-announcements-page">
+      <div id="announcementsBody"></div>
+    </main>
+  </div>
+
+  <script src="../js/config.js"></script>
+  <script src="js/faculty.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      if (!FacultyApp.requireAuth()) return;
+      FacultyApp.initLayout('announcements', 'Announcements');
+      FacultyApp.initAnnouncementsPage('announcementsBody');
+    });
+  </script>
+</body>
+</html>

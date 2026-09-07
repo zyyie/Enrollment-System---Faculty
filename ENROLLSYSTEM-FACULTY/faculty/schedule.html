@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My Teaching Schedule - Faculty Portal</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="css/faculty.css">
+  <link rel="stylesheet" href="css/faculty-extra.css">
+</head>
+<body class="admin-layout">
+  <div id="facultySidebarWrap"></div>
+  <div class="admin-main">
+    <div id="facultyHeader"></div>
+    <main class="admin-content faculty-schedule-page">
+      <div id="scheduleBody">
+        <div class="admin-empty">Loading schedule...</div>
+      </div>
+    </main>
+  </div>
+
+  <script src="../js/config.js"></script>
+  <script src="js/faculty.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      if (!FacultyApp.requireAuth()) return;
+      FacultyApp.initLayout('schedule', 'My Teaching Schedule', {
+        variant: 'schedule',
+        subtitle: '2025–2026',
+      });
+      FacultyApp.loadTeachingSchedule('scheduleBody');
+    });
+  </script>
+</body>
+</html>

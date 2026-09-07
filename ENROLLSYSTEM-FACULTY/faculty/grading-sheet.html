@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <title>Grading Sheet - Faculty Portal</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="css/faculty.css">
+  <link rel="stylesheet" href="css/faculty-extra.css">
+</head>
+<body class="admin-layout">
+  <div id="facultySidebarWrap"></div>
+  <div class="admin-main">
+    <div id="facultyHeader"></div>
+    <main class="admin-content">
+      <div class="admin-card faculty-grading-sheet-card">
+        <div class="admin-card-head"><i class="fas fa-table"></i> Grading Sheet</div>
+        <div class="admin-card-body padded">
+          <div class="faculty-gs-filters">
+            <label>School Year
+              <select id="gsSchoolYear" class="admin-input"><option value="">— Select —</option></select>
+            </label>
+            <label>Semester
+              <select id="gsSemester" class="admin-input" disabled><option value="">— Select —</option></select>
+            </label>
+            <label>Grade Level
+              <select id="gsGradeLevel" class="admin-input" disabled><option value="">— Select —</option></select>
+            </label>
+            <label>Section
+              <select id="gsSection" class="admin-input" disabled><option value="">— Select —</option></select>
+            </label>
+            <label>Subject
+              <select id="gsSubject" class="admin-input" disabled><option value="">— Select —</option></select>
+            </label>
+          </div>
+
+          <div id="gsMeta" class="faculty-gs-meta" hidden></div>
+          <p class="faculty-gs-note">Enter scores as <strong>score/total</strong> (e.g. 12/50 for quiz, 45/50 for performance task). Final grade is the average percentage of all filled cells. This sheet does not save grades.</p>
+
+          <div id="gsSheetWrap" class="faculty-gs-wrap">
+            <div class="admin-empty">Select filters above to load the grading sheet.</div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="../js/config.js"></script>
+  <script src="js/faculty.js"></script>
+  <script>
+    const GS_COLUMNS = [
+      { key: 'assignment', label: 'Assignment', group: 'WRITTEN WORKS' },
+      { key: 'quiz', label: 'Quiz', group: 'WRITTEN WORKS' },
+      { key: 'seatwork', label: 'Seatwork', group: 'WRITTEN WORKS' },
+      { key: 'activity', label: 'Activity', group: 'WRITTEN WORKS' },
+      { key: 'recitation', label: 'Recitation', group: 'WRITTEN WORKS' },
+      { key: 'performanceActivity', label: 'Performance Activity', group: 'PERFORMANCE TASKS' },
+      { key: 'project', label: 'Project', group: 'PERFORMANCE TASKS' },
+      { key: 'presentation', label: 'Presentation', group: 'PERFORMANCE TASKS' },
+      { key: 'groupActivity', label: 'Group Activity', group: 'PERFORMANCE TASKS' },
+      { key: 'laboratoryActivity', label: 'Laboratory Activity', group: 'PERFORMANCE TASKS' },
+      { key: 'reporting', label: 'Reporting', group: 'PERFORMANCE TASKS' },
+      { key: 'midtermExam', label: 'Midterm Exam', group: 'EXAMINATIONS' },
+      { key: 'finalExam', label: 'Final Exam', group: 'EXAMINATIONS' },
+      { key: 'attendance', label: 'Attendance', group: 'OTHER RECORDS' },
+      { key: 'participation', label: 'Participation', group: 'OTHER RECORDS' },
+      { key: 'behaviorConduct', label: 'Behavior / Conduct', group: 'OTHER RECORDS' },
+      { key: 'classStanding', label: 'Class Standing', group: 'OTHER RECORDS' },
+    ];
+
+    let scheduleOptions = [];
+    let currentScheduleId = null;
+    let currentStudents = [];
+
+    function gsEl(id) { return document.getElementById(id); }
+
+    function parseScoreCell(raw) {
+      const text = String(raw || '').trim();
+      if (!text || text === '—') return null;
+      const match = text.match(/^(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)$/);
+      if (!match) return null;
+      const score = Number(match[1]);
+      const total = Number(match[2]);
+      if (Number.isNaN(score) || Number.isNaN(total) || total <= 0 || score < 0 || score > total) return null;
+      return {
+        score,
+        total,
+        percentage: (score / total) * 100,
+      };
+    }
+
+    function formatScoreCell(parsed) {
+      if (!parsed) return '';
+      const fmt = (n) => (Number.isInteger(n) ? String(n) : String(Math.round(n * 100) / 100));
+      return `${fmt(parsed.score)}/${fmt(parsed.total)}`;
+    }
+
+    function normalizeScoreCell(raw) {
+      return formatScoreCell(parseScoreCell(raw));
+    }
+
+    function computeFinalGrade(rowIndex) {
+      let sum = 0;
+      let count = 0;
+      GS_COLUMNS.forEach((col) => {
+        const input = document.querySelector(`.faculty-gs-cell[data-row="${rowIndex}"][data-key="${col.key}"]`);
+        if (!input || input.value.trim() === '') return;
+        const parsed = parseScoreCell(input.value);
+        if (parsed) {
+          sum += parsed.percentage;
+          count += 1;
+        }
+      });
+      if (!count) return '—';
+      return (Math.round((sum / count) * 100) / 100).toFixed(2);
+    }
+
+    function updateFinalGrade(rowIndex) {
+      const cell = document.querySelector(`.faculty-gs-final[data-row="${rowIndex}"]`);
+      if (!cell) return;
+      const final = computeFinalGrade(rowIndex);
+      cell.textContent = final;
+      cell.classList.toggle('is-pass', final !== '—' && Number(final) >= 75);
+      cell.classList.toggle('is-fail', final !== '—' && Number(final) < 75);
+    }
+
+    function bindGradeInputs() {
+      document.querySelectorAll('.faculty-gs-cell').forEach((input) => {
+        input.addEventListener('input', () => {
+          input.classList.toggle('is-invalid', input.value.trim() !== '' && !parseScoreCell(input.value));
+          updateFinalGrade(input.dataset.row);
+        });
+        input.addEventListener('blur', () => {
+          if (input.value.trim()) {
+            const normalized = normalizeScoreCell(input.value);
+            input.value = normalized;
+            input.classList.toggle('is-invalid', !normalized);
+          } else {
+            input.classList.remove('is-invalid');
+          }
+          updateFinalGrade(input.dataset.row);
+        });
+      });
+    }
+
+    function uniqueValues(items, key) {
+      const seen = new Set();
+      const out = [];
+      items.forEach((item) => {
+        const val = item[key];
+        if (val == null || val === '' || seen.has(val)) return;
+        seen.add(val);
+        out.push(val);
+      });
+      return out;
+    }
+
+    function filteredSchedules() {
+      const sy = gsEl('gsSchoolYear').value;
+      const sem = gsEl('gsSemester').value;
+      const grade = gsEl('gsGradeLevel').value;
+      const section = gsEl('gsSection').value;
+      const subject = gsEl('gsSubject').value;
+      return scheduleOptions.filter((row) => {
+        if (sy && row.schoolYearLabel !== sy) return false;
+        if (sem && row.semesterId !== sem) return false;
+        if (grade && row.gradeLevel !== grade) return false;
+        if (section && row.sectionId !== section) return false;
+        if (subject && row.subjectId !== subject) return false;
+        return true;
+      });
+    }
+
+    function fillSelect(selectEl, values, getLabel, enabled) {
+      const current = selectEl.value;
+      selectEl.innerHTML = '<option value="">— Select —</option>';
+      values.forEach((val) => {
+        const opt = document.createElement('option');
+        opt.value = val;
+        opt.textContent = getLabel ? getLabel(val) : val;
+        selectEl.appendChild(opt);
+      });
+      selectEl.disabled = !enabled || values.length === 0;
+      if (values.includes(current)) selectEl.value = current;
+    }
+
+    function refreshFilterOptions() {
+      const sySelected = gsEl('gsSchoolYear').value;
+      const semSelected = gsEl('gsSemester').value;
+      const gradeSelected = gsEl('gsGradeLevel').value;
+      const sectionSelected = gsEl('gsSection').value;
+
+      const afterSy = scheduleOptions.filter((r) => !sySelected || r.schoolYearLabel === sySelected);
+      const afterSem = afterSy.filter((r) => !semSelected || r.semesterId === semSelected);
+      const afterGrade = afterSem.filter((r) => !gradeSelected || r.gradeLevel === gradeSelected);
+      const afterSection = afterGrade.filter((r) => !sectionSelected || r.sectionId === sectionSelected);
+
+      fillSelect(gsEl('gsSchoolYear'), uniqueValues(scheduleOptions, 'schoolYearLabel'), null, true);
+
+      fillSelect(
+        gsEl('gsSemester'),
+        uniqueValues(afterSy, 'semesterId'),
+        (id) => {
+          const row = afterSy.find((r) => r.semesterId === id);
+          return row ? row.semesterName : id;
+        },
+        !!sySelected,
+      );
+
+      fillSelect(gsEl('gsGradeLevel'), uniqueValues(afterSem, 'gradeLevel'), null, !!semSelected);
+      fillSelect(gsEl('gsSection'), uniqueValues(afterGrade, 'sectionId'), (id) => {
+        const row = afterGrade.find((r) => r.sectionId === id);
+        return row ? row.sectionName : id;
+      }, !!gradeSelected);
+
+      fillSelect(gsEl('gsSubject'), uniqueValues(afterSection, 'subjectId'), (id) => {
+        const row = afterSection.find((r) => r.subjectId === id);
+        return row ? `${row.subjectCode} — ${row.subjectName}` : id;
+      }, !!sectionSelected);
+    }
+
+    function selectedSchedule() {
+      const matches = filteredSchedules();
+      if (matches.length === 1) return matches[0];
+      const subject = gsEl('gsSubject').value;
+      if (!subject) return null;
+      return matches.find((r) => r.subjectId === subject) || null;
+    }
+
+    function renderSheet(students, meta) {
+      const wrap = gsEl('gsSheetWrap');
+      currentStudents = students || [];
+
+      if (!students || !students.length) {
+        wrap.innerHTML = '<div class="admin-empty">No enrolled students for this subject and section.</div>';
+        return;
+      }
+
+      const groups = [];
+      GS_COLUMNS.forEach((col) => {
+        if (!groups.length || groups[groups.length - 1].name !== col.group) {
+          groups.push({ name: col.group, cols: [] });
+        }
+        groups[groups.length - 1].cols.push(col);
+      });
+
+      const groupHead = groups.map((g) =>
+        `<th class="faculty-gs-group" colspan="${g.cols.length}">${FacultyApp.escHtml(g.name)}</th>`
+      ).join('');
+
+      const colHead = GS_COLUMNS.map((col) =>
+        `<th class="faculty-gs-col" title="${FacultyApp.escHtml(col.label)}">${FacultyApp.escHtml(col.label)}</th>`
+      ).join('');
+
+      const bodyRows = students.map((student, rowIndex) => {
+        const cells = GS_COLUMNS.map((col) =>
+          `<td><input type="text" inputmode="decimal" class="faculty-gs-cell"
+            data-row="${rowIndex}" data-key="${col.key}" value="" placeholder="12/50" title="Score / Total (e.g. 12/50)"></td>`
+        ).join('');
+        return `<tr>
+          <td class="faculty-gs-student">${FacultyApp.escHtml(student.studentName || '')}</td>
+          ${cells}
+          <td class="faculty-gs-final" data-row="${rowIndex}">—</td>
+        </tr>`;
+      }).join('');
+
+      wrap.innerHTML = `
+        <div class="faculty-gs-scroll">
+          <table class="faculty-gs-table">
+            <thead>
+              <tr>
+                <th class="faculty-gs-student-head" rowspan="2">Student</th>
+                ${groupHead}
+                <th class="faculty-gs-final-group" colspan="1">RESULT</th>
+              </tr>
+              <tr>${colHead}<th class="faculty-gs-final-head">Final Grade</th></tr>
+            </thead>
+            <tbody>${bodyRows}</tbody>
+          </table>
+        </div>`;
+
+      bindGradeInputs();
+
+      const metaEl = gsEl('gsMeta');
+      if (meta) {
+        metaEl.hidden = false;
+        metaEl.innerHTML = `
+          <strong>${FacultyApp.escHtml(meta.subjectCode || '')}</strong> — ${FacultyApp.escHtml(meta.subjectName || '')}
+          · ${FacultyApp.escHtml(meta.sectionName || '')}
+          · ${FacultyApp.escHtml(meta.gradeLevel || '')}
+          · ${FacultyApp.escHtml(meta.semesterName || '')}
+          · S.Y. ${FacultyApp.escHtml(meta.schoolYearLabel || '')}
+          · <span>${students.length} student(s) in section</span>`;
+      }
+    }
+
+    async function loadFilters() {
+      const facultyId = FacultyApp.facultyIdForApi().toUpperCase();
+      const res = await FacultyApp.fetchJson('/api/grading-sheet/filters?facultyId=' + encodeURIComponent(facultyId));
+      scheduleOptions = Array.isArray(res?.data) ? res.data : (Array.isArray(res) ? res : []);
+      if (!scheduleOptions.length) {
+        gsEl('gsSheetWrap').innerHTML = '<div class="admin-empty">No assigned subjects found for your account.</div>';
+        return;
+      }
+      refreshFilterOptions();
+    }
+
+    async function loadSheet() {
+      const schedule = selectedSchedule();
+      currentScheduleId = schedule ? schedule.scheduleId : null;
+      if (!currentScheduleId) {
+        gsEl('gsSheetWrap').innerHTML = '<div class="admin-empty">Complete all filters to load the grading sheet.</div>';
+        gsEl('gsMeta').hidden = true;
+        return;
+      }
+
+      gsEl('gsSheetWrap').innerHTML = '<div class="admin-empty">Loading grading sheet...</div>';
+
+      const facultyId = FacultyApp.facultyIdForApi().toUpperCase();
+      const params = new URLSearchParams({ facultyId, scheduleId: currentScheduleId, _ts: String(Date.now()) });
+      const res = await FacultyApp.fetchJson('/api/grading-sheet/data?' + params.toString());
+      const data = res?.data || res || {};
+      renderSheet(data.students || [], data.meta || schedule);
+    }
+
+    function bindFilters() {
+      const chain = ['gsSchoolYear', 'gsSemester', 'gsGradeLevel', 'gsSection', 'gsSubject'];
+      chain.forEach((id, index) => {
+        gsEl(id).addEventListener('change', () => {
+          for (let i = index + 1; i < chain.length; i += 1) {
+            gsEl(chain[i]).value = '';
+          }
+          refreshFilterOptions();
+          loadSheet().catch((err) => {
+            gsEl('gsSheetWrap').innerHTML = `<div class="admin-empty">${FacultyApp.escHtml(err.message)}</div>`;
+          });
+        });
+      });
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      if (!FacultyApp.requireAuth()) return;
+      FacultyApp.initLayout('grading-sheet', 'Grading Sheet');
+      bindFilters();
+      loadFilters().catch((err) => {
+        gsEl('gsSheetWrap').innerHTML = `<div class="admin-empty">${FacultyApp.escHtml(err.message)}</div>`;
+      });
+    });
+  </script>
+</body>
+</html>

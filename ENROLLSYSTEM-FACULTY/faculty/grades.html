@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <title>Grades - Faculty Portal</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="css/faculty.css">
+  <link rel="stylesheet" href="css/faculty-extra.css">
+</head>
+<body class="admin-layout">
+  <div id="facultySidebarWrap"></div>
+  <div class="admin-main">
+    <div id="facultyHeader"></div>
+    <main class="admin-content">
+      <div class="admin-card">
+        <div class="admin-card-head"><i class="fas fa-graduation-cap"></i> Grades Management — <span id="gradesLevelLabel">Grade 11</span></div>
+        <div class="admin-card-body padded">
+          <p class="faculty-grades-section-title">Select a class (one card per subject), then click a student to encode grades.</p>
+          <div class="faculty-grades-scale">
+            <table>
+              <thead><tr><th>Grade</th><th>Descriptor</th></tr></thead>
+              <tbody>
+                <tr><td>90 – 100</td><td title="Outstanding">Outstanding</td></tr>
+                <tr><td>85 – 89</td><td title="Very Satisfactory">Very Satisfactory</td></tr>
+                <tr><td>80 – 84</td><td title="Satisfactory">Satisfactory</td></tr>
+                <tr><td>75 – 79</td><td title="Fairly Satisfactory">Fairly Satisfactory</td></tr>
+                <tr><td>Below 75</td><td title="Did Not Meet Expectations (Failed)">Did Not Meet Expectations (Failed)</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <h3 class="admin-section-title faculty-student-list-title">My Classes</h3>
+          <div id="gradesSectionsGrid" class="faculty-section-cards"><div class="admin-empty">Loading sections...</div></div>
+          <div id="gradesStudentsPanel" class="faculty-grades-students-panel" hidden>
+            <h3 class="admin-section-title faculty-student-list-title" id="gradesSectionTitle">Students</h3>
+            <div id="studentsList"></div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <div id="gradesModal" class="admin-modal-overlay" aria-hidden="true">
+    <div class="admin-modal faculty-grades-modal" role="dialog" aria-modal="true" aria-labelledby="gradesModalTitle">
+      <div class="faculty-grades-modal-head">
+        <h2 id="gradesModalTitle">Encode Grades</h2>
+        <button type="button" class="faculty-grades-modal-close" id="closeGradesModal" aria-label="Close">&times;</button>
+      </div>
+      <div class="faculty-grades-modal-body" id="gradesForm">
+        <div class="admin-empty">Loading subjects...</div>
+      </div>
+    </div>
+  </div>
+
+  <script src="../js/config.js"></script>
+  <script src="../js/supabase-client.js"></script>
+  <script src="../js/supabase-service.js"></script>
+  <script src="js/faculty.js"></script>
+  <script>
+    let selectedEnrollmentId = null;
+    let selectedStudentName = '';
+    let selectedScheduleId = null;
+
+    function gradeStatus(score) {
+      if (score === '' || score == null || Number.isNaN(Number(score))) return '—';
+      return Number(score) >= 75 ? 'Passed' : 'Failed';
+    }
+
+    function statusClass(score) {
+      if (score === '' || score == null || Number.isNaN(Number(score))) return '';
+      return Number(score) >= 75 ? 'faculty-grade-pass' : 'faculty-grade-fail';
+    }
+
+    function clampGradeValue(raw) {
+      if (raw === '' || raw == null) return '';
+      let n = Math.round(Number(raw));
+      if (Number.isNaN(n)) return '';
+      if (n < 0) n = 0;
+      if (n > 100) n = 100;
+      return String(n);
+    }
+
+    function openGradesModal() {
+      const modal = document.getElementById('gradesModal');
+      modal.classList.add('open');
+      modal.setAttribute('aria-hidden', 'false');
+      document.body.classList.add('admin-modal-open');
+    }
+
+    function closeGradesModal() {
+      const modal = document.getElementById('gradesModal');
+      modal.classList.remove('open');
+      modal.setAttribute('aria-hidden', 'true');
+      document.body.classList.remove('admin-modal-open');
+      document.querySelectorAll('.faculty-student-name-item.is-selected').forEach(el => el.classList.remove('is-selected'));
+    }
+
+    function updateStatusCell(row, value) {
+      const cell = row.querySelector('.grade-status-cell');
+      const text = gradeStatus(value);
+      cell.textContent = text;
+      cell.className = 'grade-status-cell ' + statusClass(value);
+    }
+
+    function bindGradeInputs() {
+      document.querySelectorAll('#gradesForm .grade-final').forEach(input => {
+        input.addEventListener('input', () => {
+          const clamped = clampGradeValue(input.value);
+          if (input.value !== '' && clamped !== input.value) input.value = clamped;
+          updateStatusCell(input.closest('tr'), input.value);
+        });
+        input.addEventListener('blur', () => {
+          const clamped = clampGradeValue(input.value);
+          if (input.value !== '' && clamped !== '') input.value = clamped;
+          updateStatusCell(input.closest('tr'), input.value);
+        });
+      });
+      document.getElementById('saveGradesBtn')?.addEventListener('click', saveGrades);
+    }
+
+    function renderGradesForm(sheet) {
+      document.getElementById('gradesForm').innerHTML = `
+        <div class="faculty-grades-table-wrap">
+          <table class="faculty-grades-table">
+            <thead>
+              <tr>
+                <th class="col-code">Code</th>
+                <th class="col-subject">Subject</th>
+                <th class="col-grade">Final Grade</th>
+                <th class="col-status">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${sheet.map(row => {
+                const val = row.finalGrade ?? '';
+                const normalized = val !== '' && val != null ? clampGradeValue(val) : '';
+                const status = gradeStatus(normalized);
+                return `
+                <tr data-es-id="${row.enrollmentSubjectId}">
+                  <td class="col-code">${FacultyApp.escHtml(row.code)}</td>
+                  <td class="col-subject">${FacultyApp.escHtml(row.description)}</td>
+                  <td class="col-grade">
+                    <input type="number" min="0" max="100" step="1" class="admin-input grade-final" value="${normalized ? FacultyApp.escHtml(normalized) : ''}" placeholder="0–100">
+                  </td>
+                  <td class="col-status">
+                    <span class="grade-status-cell ${statusClass(normalized)}">${FacultyApp.escHtml(status)}</span>
+                  </td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+        <div class="faculty-grades-modal-foot">
+          <p class="faculty-grades-modal-note">Passing grade: 75. Grade 11 progression runs automatically when all final grades are saved.</p>
+          <button type="button" class="admin-btn success" id="saveGradesBtn">Save Grades</button>
+        </div>`;
+      bindGradeInputs();
+    }
+
+    async function openGradesSheet(enrollmentId, studentName, scheduleId) {
+      selectedEnrollmentId = enrollmentId;
+      selectedStudentName = studentName;
+      selectedScheduleId = scheduleId || null;
+      document.getElementById('gradesModalTitle').textContent = 'Encode Grades — ' + studentName;
+      document.getElementById('gradesForm').innerHTML = '<div class="admin-empty">Loading subjects...</div>';
+      openGradesModal();
+
+      const q = FacultyApp.facultyQueryParam();
+      let query = `?enrollmentId=${encodeURIComponent(enrollmentId)}`;
+      if (selectedScheduleId) {
+        query += `&scheduleId=${encodeURIComponent(selectedScheduleId)}`;
+      }
+      if (q) query += `&${q}`;
+
+      try {
+        const res = await FacultyApp.fetchJson('/api/grades/sheet' + query);
+        const sheet = res.data || [];
+        if (!sheet.length) {
+          closeGradesModal();
+          await FacultyApp.alertDialog({
+            type: 'info',
+            title: 'No Subjects',
+            message: 'No subjects assigned to you for this student in the current term.',
+          });
+          return;
+        }
+        renderGradesForm(sheet);
+      } catch (err) {
+        closeGradesModal();
+        await FacultyApp.alertDialog({ type: 'error', title: 'Load Failed', message: err.message });
+      }
+    }
+
+    async function saveGrades() {
+      const user = FacultyApp.getUser();
+      const grades = [];
+      document.querySelectorAll('#gradesForm tbody tr[data-es-id]').forEach(row => {
+        grades.push({
+          enrollmentSubjectId: row.dataset.esId,
+          finalGrade: clampGradeValue(row.querySelector('.grade-final').value)
+        });
+      });
+
+      try {
+        const json = await FacultyApp.postJson('/api/grades/save', {
+          enrollmentId: selectedEnrollmentId,
+          facultyId: user?.id,
+          grades
+        });
+        if (!json.success) throw new Error(json.error || 'Save failed');
+        closeGradesModal();
+        FacultyApp.showMessage({ type: 'success', title: 'Grades Saved', message: 'Grades recorded successfully.' });
+      } catch (err) {
+        await FacultyApp.alertDialog({ type: 'error', title: 'Save Failed', message: err.message });
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      FacultyApp.initGradesPage({
+        onSelectStudent: (enrollmentId, studentName, scheduleId) => openGradesSheet(enrollmentId, studentName, scheduleId),
+      });
+      document.getElementById('closeGradesModal').addEventListener('click', closeGradesModal);
+      document.getElementById('gradesModal').addEventListener('click', (e) => {
+        if (e.target.id === 'gradesModal') closeGradesModal();
+      });
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && document.getElementById('gradesModal').classList.contains('open')) {
+          closeGradesModal();
+        }
+      });
+    });
+  </script>
+</body>
+</html>
