@@ -506,8 +506,7 @@ const FacultyApp = (() => {
     return `
       <aside class="admin-sidebar" id="facultySidebar">
         <div class="admin-brand">
-          <img src="../assets/geranova-logo.png" alt="Logo">
-          <span>Geranova Senior High School</span>
+          <span>Senior High School</span>
           <small style="display:block;font-size:11px;opacity:.85;margin-top:4px;">Faculty Portal</small>
         </div>
         <nav class="admin-nav">
@@ -1542,7 +1541,7 @@ const FacultyApp = (() => {
     if (!container) return;
 
     const user = options.user || getUser();
-    const schoolName = dashboardData.schoolName || 'Geranova Senior High School';
+    const schoolName = dashboardData.schoolName || 'Senior High School';
     const classBreakdown = dashboardClassBreakdown(scheduleRows);
     const studentBreakdown = dashboardStudentBreakdown(
       scheduleRows,
