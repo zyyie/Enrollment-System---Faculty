@@ -84,10 +84,17 @@
     .password-toggle:hover,
     .password-toggle:focus-visible { color: #1a3a6b; background: rgba(26, 58, 107, 0.06); outline: none; }
     .password-toggle.is-visible { color: #1a3a6b; }
+    /* Edge: hide native password eye (see also password-field.js injected styles) */
+    input[type="password"]::-ms-reveal,
+    input[type="password"]::-ms-clear {
+      display: none !important;
+      width: 0 !important;
+      height: 0 !important;
+      opacity: 0 !important;
+      pointer-events: none !important;
+    }
     .faculty-login-card button[type="submit"] { width: 100%; padding: 12px; border: 0; border-radius: 8px; background: #1a3a6b; color: #fff; font-weight: 600; cursor: pointer; }
     .faculty-login-card .error { color: #dc2626; font-size: 13px; min-height: 18px; margin-bottom: 10px; }
-    .faculty-login-card .hint { font-size: 12px; color: #64748b; margin-top: 16px; text-align: center; }
-    .faculty-login-card .hint a { color: #1a73e8; }
   </style>
 </head>
 <body>
@@ -100,14 +107,13 @@
         <label for="facultyId">Faculty ID</label>
         <input type="text" id="facultyId" placeholder="FAC-STEM-01" required>
         <label for="password">Password</label>
-        <input type="password" id="password" required>
+        <input type="password" id="password" autocomplete="current-password" required>
         <button type="submit">Sign in</button>
       </form>
-      <p class="hint">Registrar? Use the <a href="http://localhost:8001/login.html">Admin Portal</a>.</p>
     </div>
   </div>
 
-  <script src="js/password-field.js"></script>
+  <script src="js/password-field.js?v=4"></script>
   <script>
     document.getElementById('facultyLoginForm').addEventListener('submit', async (event) => {
       event.preventDefault();

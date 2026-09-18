@@ -1,5 +1,5 @@
 """
-Geranova EMS — Faculty Portal (Teachers)
+EMS — Faculty Portal (Teachers)
 Run: python server.py
 Port: 8003
 """
@@ -41,6 +41,12 @@ def load_env():
         ROOT / ".env",
         ROOT.parent / "ENROLLSYSTEM-ADMIN" / ".env",
     ]
+    desktop = Path.home() / "OneDrive" / "Desktop"
+    for admin_root in (
+        desktop / "Enrollment-System-Admin" / "ENROLLSYSTEM-ADMIN",
+        desktop / "Enrollment systemproject" / "ENROLLSYSTEM-ADMIN",
+    ):
+        candidates.append(admin_root / ".env")
     env_path = next((p for p in candidates if p.exists()), None)
     if not env_path:
         return env, None
@@ -62,7 +68,7 @@ ENV, ENV_SOURCE = load_env()
 SUPABASE_URL = ENV.get("SUPABASE_URL", "").rstrip("/")
 SUPABASE_PUBLISHABLE_KEY = ENV.get("SUPABASE_PUBLISHABLE_KEY", "")
 SUPABASE_SECRET_KEY = ENV.get("SUPABASE_SECRET_KEY", "")
-SCHOOL_NAME = ENV.get("SCHOOL_NAME", "Geranova Senior High School")
+SCHOOL_NAME = ENV.get("SCHOOL_NAME", "Enrollment Management System")
 
 
 def json_response(handler, status, payload):
@@ -1860,7 +1866,7 @@ def faculty_port_candidates(preferred, count=10):
 
 def print_faculty_banner(url, *, already_running=False, port_note=None):
     print("=" * 50)
-    print("  Geranova EMS — FACULTY PORTAL (Teachers)")
+    print("  EMS — FACULTY PORTAL (Teachers)")
     print("=" * 50)
     if port_note:
         print(f"\n  {port_note}")
